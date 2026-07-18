@@ -1,0 +1,13 @@
+.DS_Store
+.mamari/
+/mamari
+*.test
+coverage/
+.gocache/
+dist/
+__pycache__/
+*.py[cod]
+.claude/settings.local.json
+# Internal development history (dated benchmark reports, session handoffs,
+# audits, roadmaps) — kept locally, not published.
+dev-notes/

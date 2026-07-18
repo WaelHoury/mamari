@@ -1,0 +1,441 @@
+{
+  "symbols": [
+    {
+      "id": "symbol:file:controllers/documentController.js",
+      "name": "controllers/documentController.js",
+      "kind": "file",
+      "language": "javascript",
+      "file": "controllers/documentController.js",
+      "startLine": 1
+    },
+    {
+      "id": "symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments",
+      "name": "downloadEnvelopeDocuments",
+      "kind": "function",
+      "language": "javascript",
+      "file": "controllers/documentController.js",
+      "startLine": 1,
+      "signature": "async function downloadEnvelopeDocuments(req) {",
+      "complexity": 1
+    },
+    {
+      "id": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "name": "previewEnvelopeDocuments",
+      "kind": "function",
+      "language": "javascript",
+      "file": "controllers/documentController.js",
+      "startLine": 5,
+      "signature": "export async function previewEnvelopeDocuments(req, res) {",
+      "complexity": 1
+    },
+    {
+      "id": "symbol:file:routes/documentRoutes.js",
+      "name": "routes/documentRoutes.js",
+      "kind": "file",
+      "language": "javascript",
+      "file": "routes/documentRoutes.js",
+      "startLine": 1
+    },
+    {
+      "id": "symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview",
+      "name": "POST /signing/:id/preview",
+      "kind": "http-route",
+      "language": "javascript",
+      "file": "routes/documentRoutes.js",
+      "startLine": 3,
+      "signature": "router.post('/signing/:id/preview', previewEnvelopeDocuments)"
+    }
+  ],
+  "symbolEdges": [
+    {
+      "id": "cgpedge:calls:symbol:file:routes/documentRoutes.js:unresolved:router.post:routes/documentRoutes.js:3:1",
+      "from": "symbol:file:routes/documentRoutes.js",
+      "to": "unresolved:router.post",
+      "type": "calls",
+      "confidence": "unresolved",
+      "unresolvedReason": "dynamic_receiver",
+      "evidence": {
+        "file": "routes/documentRoutes.js",
+        "startLine": 3,
+        "startColumn": 1,
+        "endLine": 3,
+        "endColumn": 12,
+        "kind": "call",
+        "raw": "router.post"
+      }
+    },
+    {
+      "id": "cgpedge:calls:symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments:unresolved:Buffer.from:controllers/documentController.js:2:10",
+      "from": "symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments",
+      "to": "unresolved:Buffer.from",
+      "type": "calls",
+      "confidence": "unresolved",
+      "unresolvedReason": "dynamic_receiver",
+      "evidence": {
+        "file": "controllers/documentController.js",
+        "startLine": 2,
+        "startColumn": 10,
+        "endLine": 2,
+        "endColumn": 21,
+        "kind": "call",
+        "raw": "Buffer.from"
+      }
+    },
+    {
+      "id": "cgpedge:calls:symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments:symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments:controllers/documentController.js:6:22",
+      "from": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "to": "symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments",
+      "type": "calls",
+      "confidence": "exact",
+      "evidence": {
+        "file": "controllers/documentController.js",
+        "startLine": 6,
+        "startColumn": 22,
+        "endLine": 6,
+        "endColumn": 47,
+        "kind": "call",
+        "raw": "downloadEnvelopeDocuments"
+      }
+    },
+    {
+      "id": "cgpedge:calls:symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments:unresolved:res.end:controllers/documentController.js:8:10",
+      "from": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "to": "unresolved:res.end",
+      "type": "calls",
+      "confidence": "unresolved",
+      "unresolvedReason": "dynamic_receiver",
+      "evidence": {
+        "file": "controllers/documentController.js",
+        "startLine": 8,
+        "startColumn": 10,
+        "endLine": 8,
+        "endColumn": 17,
+        "kind": "call",
+        "raw": "res.end"
+      }
+    },
+    {
+      "id": "cgpedge:calls:symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments:unresolved:res.setHeader:controllers/documentController.js:7:3",
+      "from": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "to": "unresolved:res.setHeader",
+      "type": "calls",
+      "confidence": "unresolved",
+      "unresolvedReason": "dynamic_receiver",
+      "evidence": {
+        "file": "controllers/documentController.js",
+        "startLine": 7,
+        "startColumn": 3,
+        "endLine": 7,
+        "endColumn": 16,
+        "kind": "call",
+        "raw": "res.setHeader"
+      }
+    },
+    {
+      "id": "cgpedge:handles-route:symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview:symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments:routes/documentRoutes.js:3:1",
+      "from": "symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview",
+      "to": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "type": "handles-route",
+      "confidence": "scoped",
+      "evidence": {
+        "file": "routes/documentRoutes.js",
+        "startLine": 3,
+        "startColumn": 1,
+        "endLine": 3,
+        "endColumn": 26,
+        "kind": "http-route",
+        "raw": "POST /signing/:id/preview -\u003e previewEnvelopeDocuments"
+      }
+    },
+    {
+      "id": "cgpedge:imports:symbol:file:routes/documentRoutes.js:module:../controllers/documentController:routes/documentRoutes.js:1:1",
+      "from": "symbol:file:routes/documentRoutes.js",
+      "to": "module:../controllers/documentController",
+      "type": "imports",
+      "confidence": "exact",
+      "evidence": {
+        "file": "routes/documentRoutes.js",
+        "startLine": 1,
+        "startColumn": 1,
+        "endLine": 1,
+        "endColumn": 34,
+        "kind": "import",
+        "raw": "../controllers/documentController"
+      }
+    },
+    {
+      "id": "cgpedge:references-symbol:symbol:file:routes/documentRoutes.js:symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments:routes/documentRoutes.js:3:37",
+      "from": "symbol:file:routes/documentRoutes.js",
+      "to": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+      "type": "references-symbol",
+      "confidence": "scoped",
+      "evidence": {
+        "file": "routes/documentRoutes.js",
+        "startLine": 3,
+        "startColumn": 37,
+        "endLine": 3,
+        "endColumn": 61,
+        "kind": "value-ref",
+        "raw": "previewEnvelopeDocuments"
+      }
+    }
+  ],
+  "references": null,
+  "inspectExact": {
+    "status": "ok",
+    "query": "previewEnvelopeDocuments application/pdf /signing/:id/preview",
+    "exactPhrases": [
+      {
+        "literal": "/signing/:id/preview",
+        "kind": "route"
+      },
+      {
+        "literal": "application/pdf",
+        "kind": "mime"
+      },
+      {
+        "literal": "previewEnvelopeDocuments",
+        "kind": "ident"
+      }
+    ],
+    "clusters": [
+      {
+        "file": "routes/documentRoutes.js",
+        "symbol": "POST /signing/:id/preview",
+        "symbolId": "symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview",
+        "startLine": 3,
+        "route": "POST /signing/:id/preview",
+        "handler": "previewEnvelopeDocuments",
+        "line": 3,
+        "matched": [
+          "/signing/:id/preview",
+          "previewEnvelopeDocuments"
+        ],
+        "lines": [
+          {
+            "line": 3,
+            "text": "router.post('/signing/:id/preview', previewEnvelopeDocuments)",
+            "matched": [
+              "/signing/:id/preview",
+              "previewEnvelopeDocuments"
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "id": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+            "name": "previewEnvelopeDocuments",
+            "kind": "function",
+            "language": "javascript",
+            "file": "controllers/documentController.js",
+            "startLine": 5,
+            "signature": "export async function previewEnvelopeDocuments(req, res) {",
+            "complexity": 1
+          }
+        ],
+        "score": 5340
+      },
+      {
+        "file": "controllers/documentController.js",
+        "symbol": "previewEnvelopeDocuments",
+        "symbolId": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+        "startLine": 5,
+        "matched": [
+          "application/pdf",
+          "previewEnvelopeDocuments"
+        ],
+        "lines": [
+          {
+            "line": 5,
+            "text": "export async function previewEnvelopeDocuments(req, res) {",
+            "matched": [
+              "previewEnvelopeDocuments"
+            ]
+          },
+          {
+            "line": 7,
+            "text": "res.setHeader('Content-Type', 'application/pdf')",
+            "matched": [
+              "application/pdf"
+            ]
+          }
+        ],
+        "callers": [
+          {
+            "id": "symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview",
+            "name": "POST /signing/:id/preview",
+            "kind": "http-route",
+            "language": "javascript",
+            "file": "routes/documentRoutes.js",
+            "startLine": 3,
+            "signature": "router.post('/signing/:id/preview', previewEnvelopeDocuments)"
+          }
+        ],
+        "callees": [
+          {
+            "id": "symbol:javascript:function:controllers/documentController.js:downloadEnvelopeDocuments",
+            "name": "downloadEnvelopeDocuments",
+            "kind": "function",
+            "language": "javascript",
+            "file": "controllers/documentController.js",
+            "startLine": 1,
+            "signature": "async function downloadEnvelopeDocuments(req) {",
+            "complexity": 1
+          }
+        ],
+        "score": 3420
+      },
+      {
+        "file": "routes/documentRoutes.js",
+        "matched": [
+          "previewEnvelopeDocuments"
+        ],
+        "lines": [
+          {
+            "line": 1,
+            "text": "import { previewEnvelopeDocuments } from '../controllers/documentController'",
+            "matched": [
+              "previewEnvelopeDocuments"
+            ]
+          }
+        ],
+        "score": 950
+      }
+    ]
+  },
+  "searchCode": {
+    "status": "ok",
+    "query": "GET /signing/:id/preview application/pdf",
+    "mode": "evidence",
+    "limit": 4,
+    "total": 2,
+    "hits": [
+      {
+        "file": "routes/documentRoutes.js",
+        "startLine": 3,
+        "score": 1868,
+        "matchedTerms": [
+          "id",
+          "preview",
+          "signing"
+        ],
+        "matchedExact": [
+          "/signing/:id/preview"
+        ],
+        "symbols": [
+          {
+            "name": "POST /signing/:id/preview",
+            "kind": "http-route"
+          }
+        ],
+        "text": "router.post('/signing/:id/preview', previewEnvelopeDocuments)\n"
+      },
+      {
+        "file": "controllers/documentController.js",
+        "startLine": 7,
+        "score": 1200,
+        "matchedTerms": [
+          "application",
+          "pdf",
+          "preview"
+        ],
+        "matchedExact": [
+          "application/pdf"
+        ],
+        "symbols": [
+          {
+            "name": "previewEnvelopeDocuments",
+            "kind": "function",
+            "startLine": 5
+          }
+        ],
+        "text": "  res.setHeader('Content-Type', 'application/pdf')\n"
+      }
+    ],
+    "exactPhrases": [
+      {
+        "literal": "/signing/:id/preview",
+        "kind": "route"
+      },
+      {
+        "literal": "application/pdf",
+        "kind": "mime"
+      }
+    ],
+    "warnings": [
+      "exact_first filtered search results to exact phrase matches",
+      "terms with no match in this repo: get"
+    ]
+  },
+  "repoMap": {
+    "status": "ok",
+    "files": [
+      {
+        "file": "controllers/documentController.js",
+        "language": "javascript",
+        "rank": 0.6745028082571627,
+        "score": 854542,
+        "inbound": 2,
+        "outbound": 0,
+        "matchedMention": [
+          "documents",
+          "envelope",
+          "preview",
+          "previewenvelopedocuments"
+        ]
+      },
+      {
+        "file": "routes/documentRoutes.js",
+        "language": "javascript",
+        "rank": 0.3254971917428374,
+        "score": 505507,
+        "inbound": 0,
+        "outbound": 2,
+        "matchedMention": [
+          "documents",
+          "envelope",
+          "preview",
+          "previewenvelopedocuments"
+        ]
+      }
+    ],
+    "symbols": [
+      {
+        "id": "symbol:javascript:function:controllers/documentController.js:previewEnvelopeDocuments",
+        "name": "previewEnvelopeDocuments",
+        "kind": "function",
+        "language": "javascript",
+        "file": "controllers/documentController.js",
+        "startLine": 5,
+        "signature": "export async function previewEnvelopeDocuments(req, res) {",
+        "score": 1587502,
+        "complexity": 1,
+        "fileRank": 0.6745028082571627,
+        "matchedMention": [
+          "documents",
+          "envelope",
+          "preview",
+          "previewenvelopedocuments"
+        ]
+      },
+      {
+        "id": "symbol:http:http-route:routes/documentRoutes.js:POST /signing/:id/preview",
+        "name": "POST /signing/:id/preview",
+        "kind": "http-route",
+        "language": "javascript",
+        "file": "routes/documentRoutes.js",
+        "startLine": 3,
+        "signature": "router.post('/signing/:id/preview', previewEnvelopeDocuments)",
+        "score": 1225597,
+        "fileRank": 0.3254971917428374,
+        "matchedMention": [
+          "documents",
+          "envelope",
+          "preview",
+          "previewenvelopedocuments"
+        ]
+      }
+    ],
+    "truncated": true
+  }
+}

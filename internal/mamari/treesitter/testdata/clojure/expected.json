@@ -1,0 +1,12 @@
+{
+  "language": "clojure",
+  "symbols": [
+    {"name": "find-user-clj", "kind": "function", "confidence": "exact"},
+    {"name": "helper-clj", "kind": "function", "confidence": "exact"},
+    {"name": "load-user-clj", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "find-user-clj", "toName": "helper-clj"},
+    {"fromName": "load-user-clj", "toName": "find-user-clj"}
+  ]
+}

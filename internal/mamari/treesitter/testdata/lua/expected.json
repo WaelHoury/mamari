@@ -1,0 +1,14 @@
+{
+  "language": "lua",
+  "symbols": [
+    {"name": "new", "kind": "method", "confidence": "exact"},
+    {"name": "findUserLua", "kind": "method", "confidence": "exact"},
+    {"name": "loadLua", "kind": "method", "confidence": "exact"},
+    {"name": "luaHelper", "kind": "function", "confidence": "exact"},
+    {"name": "luaTopLevel", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "luaTopLevel", "toName": "luaHelper"},
+    {"fromName": "loadLua", "toName": "findUserLua"}
+  ]
+}

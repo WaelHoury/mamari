@@ -1,0 +1,16 @@
+{
+  "language": "elixir",
+  "symbols": [
+    {"name": "ExUserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "find_user_ex", "kind": "method", "confidence": "exact", "parentName": "ExUserRepo"},
+    {"name": "helper_ex", "kind": "method", "confidence": "exact", "parentName": "ExUserRepo"},
+    {"name": "load_ex", "kind": "method", "confidence": "exact", "parentName": "ExUserRepo"},
+    {"name": "guarded_ex", "kind": "method", "confidence": "exact", "parentName": "ExUserRepo"},
+    {"name": "ExUserService", "kind": "class", "confidence": "exact"},
+    {"name": "load_user_ex", "kind": "method", "confidence": "exact", "parentName": "ExUserService"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "load_ex", "toName": "helper_ex"},
+    {"fromName": "load_user_ex", "toName": "find_user_ex"}
+  ]
+}

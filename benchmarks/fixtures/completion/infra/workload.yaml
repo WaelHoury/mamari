@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      serviceAccountName: api-account
+      containers:
+        - name: api
+          image: example/api:v1
+          envFrom:
+            - configMapRef: {name: api-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector: {app: api}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-account

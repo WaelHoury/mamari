@@ -1,0 +1,9 @@
+{
+  "language": "hcl",
+  "symbols": [
+    {"name": "var.region", "kind": "terraform-variable", "confidence": "exact"},
+    {"name": "aws_instance.web", "kind": "terraform-resource", "confidence": "exact"},
+    {"name": "module.network", "kind": "terraform-module", "confidence": "exact"}
+  ],
+  "resolvedCalls": []
+}

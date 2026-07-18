@@ -1,0 +1,17 @@
+{
+  "language": "kotlin",
+  "symbols": [
+    {"name": "KtUserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "findUserKt", "kind": "method", "confidence": "exact", "parentName": "KtUserRepo"},
+    {"name": "KtUserService", "kind": "class", "confidence": "exact"},
+    {"name": "ktLoad", "kind": "method", "confidence": "exact", "parentName": "KtUserService"},
+    {"name": "KtGreeter", "kind": "interface", "confidence": "exact"},
+    {"name": "greet", "kind": "method", "confidence": "exact", "parentName": "KtGreeter"},
+    {"name": "ktHelper", "kind": "function", "confidence": "exact"},
+    {"name": "ktTopLevel", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "ktTopLevel", "toName": "ktHelper"},
+    {"fromName": "ktLoad", "toName": "findUserKt"}
+  ]
+}

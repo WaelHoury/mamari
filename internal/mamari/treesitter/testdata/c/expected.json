@@ -1,0 +1,15 @@
+{
+  "language": "c",
+  "symbols": [
+    {"name": "CUserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "c_find_user", "kind": "function", "confidence": "exact"},
+    {"name": "CUserService", "kind": "class", "confidence": "exact"},
+    {"name": "c_load", "kind": "function", "confidence": "exact"},
+    {"name": "c_helper", "kind": "function", "confidence": "exact"},
+    {"name": "c_top_level", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "c_load", "toName": "c_find_user"},
+    {"fromName": "c_top_level", "toName": "c_helper"}
+  ]
+}

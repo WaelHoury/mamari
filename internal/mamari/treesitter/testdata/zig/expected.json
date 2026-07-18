@@ -1,0 +1,10 @@
+{
+  "language": "zig",
+  "symbols": [
+    {"name": "scale", "kind": "function", "confidence": "exact"},
+    {"name": "norm", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "norm", "toName": "scale"}
+  ]
+}

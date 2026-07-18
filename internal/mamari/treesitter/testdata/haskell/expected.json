@@ -1,0 +1,16 @@
+{
+  "language": "haskell",
+  "symbols": [
+    {"name": "findUserHs", "kind": "function", "confidence": "exact"},
+    {"name": "helperHs", "kind": "function", "confidence": "exact"},
+    {"name": "multiArgHs", "kind": "function", "confidence": "exact"},
+    {"name": "addThreeHs", "kind": "function", "confidence": "exact"},
+    {"name": "qualifiedUserHs", "kind": "function", "confidence": "exact"},
+    {"name": "qualifiedHelperHs", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "findUserHs", "toName": "helperHs"},
+    {"fromName": "multiArgHs", "toName": "addThreeHs"},
+    {"fromName": "qualifiedUserHs", "toName": "qualifiedHelperHs"}
+  ]
+}

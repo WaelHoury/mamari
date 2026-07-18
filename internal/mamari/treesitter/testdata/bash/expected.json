@@ -1,0 +1,12 @@
+{
+  "language": "bash",
+  "symbols": [
+    {"name": "bash_helper", "kind": "function", "confidence": "exact"},
+    {"name": "bash_build", "kind": "function", "confidence": "exact"},
+    {"name": "bash_top_level", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "bash_build", "toName": "bash_helper"},
+    {"fromName": "bash_top_level", "toName": "bash_build"}
+  ]
+}

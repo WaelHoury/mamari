@@ -1,0 +1,17 @@
+{
+  "language": "rust",
+  "symbols": [
+    {"name": "UserService", "kind": "class", "confidence": "exact"},
+    {"name": "new", "kind": "method", "confidence": "exact", "parentName": "UserService"},
+    {"name": "load", "kind": "method", "confidence": "exact", "parentName": "UserService"},
+    {"name": "Greeter", "kind": "interface", "confidence": "exact"},
+    {"name": "greet", "kind": "method", "confidence": "exact", "parentName": "UserService"},
+    {"name": "helper", "kind": "function", "confidence": "exact"},
+    {"name": "UserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "find_user", "kind": "method", "confidence": "exact", "parentName": "UserRepo"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "load", "toName": "find_user"},
+    {"fromName": "greet", "toName": "helper"}
+  ]
+}

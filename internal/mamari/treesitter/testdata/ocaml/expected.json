@@ -1,0 +1,10 @@
+{
+  "language": "ocaml",
+  "symbols": [
+    {"name": "square", "kind": "function", "confidence": "exact"},
+    {"name": "sum_squares", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "sum_squares", "toName": "square"}
+  ]
+}

@@ -1,0 +1,79 @@
+version: 2
+
+project_name: mamari
+
+before:
+  hooks:
+    - go mod tidy -diff
+
+builds:
+  - id: mamari-darwin
+    main: ./cmd/mamari
+    binary: mamari
+    env:
+      - CGO_ENABLED=1
+      - MACOSX_DEPLOYMENT_TARGET=12.0
+      - CGO_CFLAGS=-mmacosx-version-min=12.0
+      - CGO_CXXFLAGS=-mmacosx-version-min=12.0
+      - CGO_LDFLAGS=-mmacosx-version-min=12.0
+      - 'CC="{{ .Env.PWD }}/scripts/zig-cc.sh"'
+      - 'CXX="{{ .Env.PWD }}/scripts/zig-cxx.sh"'
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  - id: mamari-cross
+    main: ./cmd/mamari
+    binary: mamari
+    env:
+      - CGO_ENABLED=1
+      - 'CC="{{ .Env.PWD }}/scripts/zig-cc.sh"'
+      - 'CXX="{{ .Env.PWD }}/scripts/zig-cxx.sh"'
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: mamari
+    ids:
+      - mamari-darwin
+      - mamari-cross
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - SECURITY.md
+      - THIRD_PARTY_LICENSES
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

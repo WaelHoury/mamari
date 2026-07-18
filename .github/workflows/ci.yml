@@ -1,0 +1,192 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Module consistency
+        run: go mod tidy -diff
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Static analysis
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Race test
+        run: go test -race ./...
+
+      - name: Regression gate
+        run: python3 scripts/regression_gate.py
+
+      - name: Vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+      - name: Dependency license check
+        run: go run github.com/google/go-licenses@v1.6.0 check ./... --disallowed_types=restricted,forbidden
+
+      - name: Shell syntax check
+        run: sh -n scripts/*.sh
+
+      - name: Workflow lint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          install-only: true
+
+      - name: GoReleaser check
+        run: goreleaser check
+
+      - name: Unix installer unit smoke test
+        run: |
+          release_dir="$(mktemp -d)"
+          install_dir="$(mktemp -d)"
+          go build -trimpath -o "${release_dir}/mamari" ./cmd/mamari
+          tar -czf "${release_dir}/mamari_linux_amd64.tar.gz" -C "${release_dir}" mamari
+          (
+            cd "${release_dir}"
+            sha256sum mamari_linux_amd64.tar.gz > checksums.txt
+          )
+          MAMARI_DOWNLOAD_BASE="file://${release_dir}" \
+            MAMARI_INSTALL_DIR="${install_dir}" \
+            ./scripts/install.sh
+          "${install_dir}/mamari" version
+
+  release-snapshot:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install pinned Zig
+        run: |
+          zig_dir="$(./scripts/install-zig.sh "${RUNNER_TEMP}/zig")"
+          echo "${zig_dir}" >> "${GITHUB_PATH}"
+
+      - name: Verify Zig version
+        run: test "$(zig version)" = "0.16.0"
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          install-only: true
+
+      - name: Build release snapshot
+        run: goreleaser release --snapshot --clean --skip=publish
+        env:
+          MAMARI_ZIG_CACHE_ROOT: ${{ runner.temp }}/mamari-zig-cache
+
+      - name: Verify release artifacts
+        run: ./scripts/verify-release.sh dist
+
+      - name: Install and configure MCP from the native release archive
+        run: |
+          install_dir="$(mktemp -d)"
+          smoke_repo="$(mktemp -d)"
+          printf '%s\n' 'package main' 'func main() {}' > "${smoke_repo}/main.go"
+          MAMARI_DOWNLOAD_BASE="${PWD}/dist" \
+            MAMARI_INSTALL_DIR="${install_dir}" \
+            ./scripts/install.sh
+          "${install_dir}/mamari" version
+          "${install_dir}/mamari" init --repo "${smoke_repo}" --mcp codex
+          test -s "${smoke_repo}/.mamari/index.json"
+          test -s "${smoke_repo}/.codex/config.toml"
+          "${install_dir}/mamari" status --index "${smoke_repo}/.mamari/index.json"
+
+      - name: Upload release snapshot for Windows verification
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: mamari-release-snapshot
+          path: |
+            dist/mamari_windows_amd64.zip
+            dist/mamari_windows_arm64.zip
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  windows-installer:
+    needs: release-snapshot
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Download release snapshot
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: mamari-release-snapshot
+          path: dist
+
+      - name: Validate and install the real Windows release archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/install.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            throw ($errors | Out-String)
+          }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "mamari-install"
+          $smokeRepo = Join-Path $env:RUNNER_TEMP "mamari-smoke-repo"
+          New-Item -ItemType Directory -Force -Path $smokeRepo | Out-Null
+          "export function main() { return 42 }" |
+            Set-Content -Encoding utf8 (Join-Path $smokeRepo "app.js")
+
+          $env:MAMARI_DOWNLOAD_BASE = (Resolve-Path dist).Path
+          ./scripts/install.ps1 -InstallDir $installDir -NoPathUpdate
+          $mamari = Join-Path $installDir "mamari.exe"
+          & $mamari version
+          & $mamari init --repo $smokeRepo --mcp codex
+
+          if (-not (Test-Path (Join-Path $smokeRepo ".mamari\index.json") -PathType Leaf)) {
+            throw "mamari init did not create the index"
+          }
+          if (-not (Test-Path (Join-Path $smokeRepo ".codex\config.toml") -PathType Leaf)) {
+            throw "mamari init did not create the Codex MCP configuration"
+          }
+          & $mamari status --index (Join-Path $smokeRepo ".mamari\index.json")

@@ -1,0 +1,16 @@
+{
+  "language": "dart",
+  "symbols": [
+    {"name": "DartUserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "findUserDart", "kind": "method", "confidence": "exact", "parentName": "DartUserRepo"},
+    {"name": "helperDart", "kind": "method", "confidence": "exact", "parentName": "DartUserRepo"},
+    {"name": "DartUserService", "kind": "class", "confidence": "exact"},
+    {"name": "loadDart", "kind": "method", "confidence": "exact", "parentName": "DartUserService"},
+    {"name": "topLevelDart", "kind": "function", "confidence": "exact"},
+    {"name": "helperTopLevelDart", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "findUserDart", "toName": "helperDart"},
+    {"fromName": "topLevelDart", "toName": "helperTopLevelDart"}
+  ]
+}

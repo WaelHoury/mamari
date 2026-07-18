@@ -1,0 +1,12 @@
+{
+  "language": "java",
+  "symbols": [
+    {"name": "UserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "find", "kind": "method", "confidence": "exact", "parentName": "UserRepo"},
+    {"name": "UserService", "kind": "class", "confidence": "exact"},
+    {"name": "load", "kind": "method", "confidence": "exact", "parentName": "UserService"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "load", "toName": "find"}
+  ]
+}

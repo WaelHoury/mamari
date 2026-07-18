@@ -1,0 +1,12 @@
+{
+  "language": "go",
+  "symbols": [
+    {"name": "UserRepo", "kind": "class", "confidence": "exact"},
+    {"name": "Find", "kind": "method", "confidence": "exact", "parentName": "UserRepo"},
+    {"name": "UserService", "kind": "class", "confidence": "exact"},
+    {"name": "Load", "kind": "method", "confidence": "exact", "parentName": "UserService"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "Load", "toName": "Find"}
+  ]
+}

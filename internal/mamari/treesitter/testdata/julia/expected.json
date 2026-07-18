@@ -1,0 +1,10 @@
+{
+  "language": "julia",
+  "symbols": [
+    {"name": "clean_data", "kind": "function", "confidence": "exact"},
+    {"name": "load_data", "kind": "function", "confidence": "exact"}
+  ],
+  "resolvedCalls": [
+    {"fromName": "load_data", "toName": "clean_data"}
+  ]
+}
