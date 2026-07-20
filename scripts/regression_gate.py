@@ -20,7 +20,9 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GO = os.environ.get("GO", "/usr/local/go/bin/go")
+GO = os.environ.get("GO") or shutil.which("go")
+if GO is None:
+    raise SystemExit("Go toolchain not found: install Go or set GO to its executable path")
 
 MAMARI_TEST_RE = "|".join(
     [

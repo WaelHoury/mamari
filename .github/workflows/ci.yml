@@ -27,6 +27,14 @@ jobs:
       - name: Module consistency
         run: go mod tidy -diff
 
+      - name: Public module compatibility
+        run: |
+          if grep -Eq '^[[:space:]]*replace([[:space:]]|\()' go.mod; then
+            echo "go.mod contains a replace directive; versioned go install rejects release modules that depend on replacements"
+            exit 1
+          fi
+          go install ./cmd/mamari
+
       - name: Vet
         run: go vet ./...
 

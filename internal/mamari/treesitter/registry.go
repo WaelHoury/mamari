@@ -14,7 +14,6 @@ import (
 	tree_sitter_c_sharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
 	tree_sitter_c "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	tree_sitter_cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
-	tree_sitter_elixir "github.com/tree-sitter/tree-sitter-elixir/bindings/go"
 	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	tree_sitter_haskell "github.com/tree-sitter/tree-sitter-haskell/bindings/go"
 	tree_sitter_java "github.com/tree-sitter/tree-sitter-java/bindings/go"
@@ -26,6 +25,7 @@ import (
 	tree_sitter_rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 	tree_sitter_scala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
 	"github.com/waelhoury/mamari/internal/mamari/treesitter/clojuregrammar"
+	"github.com/waelhoury/mamari/internal/mamari/treesitter/elixirgrammar"
 	"github.com/waelhoury/mamari/internal/mamari/treesitter/swiftgrammar"
 )
 
@@ -240,7 +240,7 @@ var registry = map[string]langSpec{
 		callsQuery: luaCallsQuery,
 	},
 	"elixir": {
-		grammar:    tree_sitter_elixir.Language,
+		grammar:    elixirgrammar.Language,
 		tagsQuery:  elixirTagsQuery,
 		callsQuery: elixirCallsQuery,
 	},
