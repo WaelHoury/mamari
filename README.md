@@ -639,6 +639,12 @@ Identical queries return byte-identical responses across runs and fresh server p
 
 By default, `mamari serve` installs an adaptive Go heap limit equal to 224 MiB plus the primary and linked index sizes. An existing `GOMEMLIMIT` takes precedence. Use `--memory-limit-mb N` for an explicit limit, or `--memory-limit-mb 0` to leave the runtime limit unchanged.
 
+Repository-wide lexical and semantic search caches are built lazily when a
+request first needs them. Starting an MCP server, leaving it idle, or changing
+watched files before those features are used does not trigger speculative
+whole-repository cache work. Once the lexical cache exists, watch rebakes
+refresh only the files that changed.
+
 ### Current limitations
 
 - Structural indexing is not compiler-equivalent resolution. Dynamic dispatch, reflection, dependency injection, proxies, macros, and metaprogramming can leave calls honestly `unresolved`.

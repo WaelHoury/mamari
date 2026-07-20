@@ -496,8 +496,8 @@ func SearchCode(idx *Index, query string, opts SearchCodeOptions) (resp SearchCo
 		postings = snap.postings
 		termDocFreq = snap.termDocFreq
 	} else {
-		// No watcher running (plain one-shot CLI), or a watcher hasn't
-		// completed its first rebake/warm-up publish yet — fall back to the
+		// No watcher running (plain one-shot CLI), or watch mode has not yet
+		// published an already-built cache after a rebake — fall back to the
 		// lazy on-demand build. The cache maps are immutable after publication
 		// (incremental refreshes clone and replace them), so retaining these
 		// references after releasing idx.mu is consistent with the copied
@@ -1343,10 +1343,9 @@ func isSearchDefinitionLine(file codeSearchFile, line codeSearchLine, lineNumber
 }
 
 func (idx *Index) ensureCodeSearchIndex() []codeSearchFile {
-	// Watch mode prewarms this cache immediately after registering filesystem
-	// watches, while the MCP server may already accept its first query. Without
-	// single-flight serialization both goroutines can tokenize the entire repo
-	// concurrently, roughly doubling cold latency and peak allocation.
+	// The cache is lazy, including in watch mode. Single-flight serialization
+	// prevents concurrent first queries from tokenizing the entire repository
+	// more than once.
 	idx.codeSearchBuildMu.Lock()
 	defer idx.codeSearchBuildMu.Unlock()
 
@@ -1733,6 +1732,21 @@ func (idx *Index) publishQuerySnapshot(changed []string) {
 	idx.advanceSearchCodeResults(previous, next, changed)
 	idx.published.Store(next)
 	idx.searchResultsMu.Unlock()
+}
+
+// publishQuerySnapshotIfBuilt refreshes the lock-free watch-mode snapshot only
+// after a request has already paid to build the search index. Starting an MCP
+// server or saving a file while it is otherwise idle must not tokenize the
+// whole repository speculatively.
+func (idx *Index) publishQuerySnapshotIfBuilt(changed []string) bool {
+	idx.mu.Lock()
+	built := idx.codeSearchBuilt
+	idx.mu.Unlock()
+	if !built {
+		return false
+	}
+	idx.publishQuerySnapshot(changed)
+	return true
 }
 
 func newSearchCodeCacheKey(query string, opts SearchCodeOptions, mode string) searchCodeCacheKey {

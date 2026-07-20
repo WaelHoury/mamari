@@ -34,8 +34,6 @@ type WatchOptions struct {
 
 	// OnReady is called once after filesystem watches are installed and the
 	// watcher can no longer miss an edit made by a newly connected client.
-	// It runs before optional query-cache prewarming so server startup need
-	// not wait for repository-wide tokenization.
 	OnReady func()
 }
 
@@ -116,17 +114,16 @@ func Watch(ctx context.Context, idx *Index, opts WatchOptions) error {
 			// file(s), and publishing from that state could hand readers a
 			// snapshot reflecting a half-applied edit.
 			changed := append(append([]string(nil), updated...), removed...)
-			idx.publishQuerySnapshot(changed)
-			triggerSemanticPrewarm(idx)
+			// Search and semantic indexes are intentionally lazy. Filesystem
+			// activity can happen while no agent is using the server (editor
+			// saves, branch switches, generators), and must not trigger a
+			// whole-repository warm-up. If search has already been used, its
+			// per-file cache was refreshed by rebakeChangedFiles and publishing
+			// the replacement remains cheap. Otherwise the next search request
+			// builds from the latest live graph on demand.
+			idx.publishQuerySnapshotIfBuilt(changed)
 		}
 	}
-
-	// Publish once before the event loop starts, so the very first query in
-	// the session also gets the lock-free path instead of paying the
-	// on-demand build under idx.mu — not required for correctness (the
-	// fallback in SearchCode handles a nil snapshot fine), just avoids an
-	// asymmetry where only post-edit queries are fast.
-	idx.publishQuerySnapshot(nil)
 
 	for {
 		select {
@@ -509,42 +506,6 @@ func rebakeChangedFiles(idx *Index, root string, requestedUpdates, requestedRemo
 	sort.Strings(removed)
 	idx.publishSymbolGraph()
 	return updated, removed, nil
-}
-
-// triggerSemanticPrewarm kicks off a background rebuild of the semantic
-// vector index right after a rebake, on the watcher's own goroutine's
-// schedule rather than the next query's. Without this, every edit's
-// invalidateSemanticIndex (above) leaves the next semantic_query/inspect_flow
-// call to pay the full corpus-wide rebuild (~2.8s on a real multi-thousand-
-// file repo) synchronously, since buildSemanticIndex recomputes corpus-wide
-// co-occurrence statistics and has no incremental path (unlike
-// updateCodeSearchIndexForFiles just above, which already solved this for
-// the lexical search cache).
-//
-// This does not change ensureSemanticIndex's freshness guarantee: it is the
-// exact same function a query would call, just invoked proactively. By the
-// time a query actually arrives, the rebuild is typically already done (or
-// well underway) instead of not yet started, so the cost moves off the
-// query's critical path without introducing a staleness window — any query
-// that does still race a still-running rebuild simply blocks on the
-// pre-existing semanticBuildMu, exactly as it would today.
-//
-// semanticPrewarmInFlight is a best-effort guard against piling up redundant
-// background rebuilds when edits land faster than a rebuild completes; it is
-// not required for correctness. ensureSemanticIndex's own build-time
-// staleness recheck (the "for !semanticHashesMatch" loop in semantic.go)
-// already guarantees that whichever rebuild is in flight when a later edit
-// lands will keep retrying until its result matches the latest file hashes,
-// so skipping a spawn here because one is already running never drops that
-// edit's effect — it just lets the in-flight build absorb it.
-func triggerSemanticPrewarm(idx *Index) {
-	if !idx.semanticPrewarmInFlight.CompareAndSwap(false, true) {
-		return
-	}
-	go func() {
-		defer idx.semanticPrewarmInFlight.Store(false)
-		idx.ensureSemanticIndex()
-	}()
 }
 
 func shouldRebakeDependentsForUpdate(idx *Index, root, rel string) bool {

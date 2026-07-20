@@ -6,6 +6,13 @@ versioning for public releases.
 
 ## [Unreleased]
 
+### Fixed
+
+- Long-running MCP servers no longer build repository-wide lexical and
+  semantic search caches merely because the server started or a watched file
+  changed. Both caches remain lazy until an agent requests them; caches that
+  have already been used still receive incremental watch updates.
+
 ## [0.1.0] - 2026-07-18
 
 ### Added

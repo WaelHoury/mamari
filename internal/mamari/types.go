@@ -96,24 +96,17 @@ type Index struct {
 	semanticIndex            *semanticIndex                       `json:"-"`
 	semanticSidecarPath      string                               `json:"-"`
 	semanticBuildMu          sync.Mutex                           `json:"-"`
-	// semanticPrewarmInFlight guards triggerSemanticPrewarm (watch.go) against
-	// piling up redundant background rebuild goroutines when edits arrive
-	// faster than a rebuild completes. See triggerSemanticPrewarm's doc
-	// comment for why skipping a spawn here never drops an edit's effect.
-	semanticPrewarmInFlight atomic.Bool `json:"-"`
-	literalSidecarPath      string      `json:"-"`
-	literalsLoaded          bool        `json:"-"`
+	literalSidecarPath       string                               `json:"-"`
+	literalsLoaded           bool                                 `json:"-"`
 
 	// published is an atomically-swapped, immutable snapshot of the data
 	// SearchCode's hot path needs (tokenized search cache + prefix names).
-	// Only ever written by the watcher (see watch.go's
-	// publishQuerySnapshot calls), one goroutine at a time, so concurrent
-	// Store calls never race each other; queries Load() it with no locking
-	// at all. This makes a query's latency independent of how long
-	// a concurrent rebake takes: readers do not block on a writer, without requiring
-	// a database engine. nil until the first publish (plain one-shot CLI
-	// usage with no watcher running never publishes, so it keeps today's
-	// lazy on-demand build behavior unchanged).
+	// Written by the watcher after search has first been requested, one
+	// goroutine at a time, so concurrent Store calls never race each other;
+	// queries Load() it with no locking at all. This makes a warmed query's
+	// latency independent of how long a concurrent rebake takes: readers do
+	// not block on a writer, without requiring a database engine. It remains
+	// nil until search is built and a watch rebake publishes that cache.
 	published atomic.Pointer[publishedQueryIndex] `json:"-"`
 
 	// publishedSymbolGraph is the current immutable symbol-graph generation.

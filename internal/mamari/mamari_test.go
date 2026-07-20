@@ -3825,12 +3825,10 @@ export function bravo() { return alpha() }
 	}
 }
 
-// TestPublishQuerySnapshotWarmsUpAtWatchStart covers the lock-free
-// query-snapshot mechanism added after concurrency investigation: Watch()
-// must publish a snapshot
-// synchronously before entering its event loop, so the very first query in
-// a `mamari serve --watch` session also gets the lock-free path.
-func TestPublishQuerySnapshotWarmsUpAtWatchStart(t *testing.T) {
+// TestWatchKeepsSearchIndexLazyUntilRequested guards the idle-resource
+// contract. Starting a watcher and receiving filesystem events must not
+// tokenize the whole repository before a search request actually needs it.
+func TestWatchKeepsSearchIndexLazyUntilRequested(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "src/a.ts", `export function alpha() { return 1 }
 `)
@@ -3844,27 +3842,50 @@ func TestPublishQuerySnapshotWarmsUpAtWatchStart(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ready := make(chan struct{})
+	rebakes := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = Watch(ctx, idx, WatchOptions{Debounce: 50 * time.Millisecond})
+		_ = Watch(ctx, idx, WatchOptions{
+			Debounce: 50 * time.Millisecond,
+			OnReady:  func() { close(ready) },
+			OnRebake: func(updated, removed []string) {
+				select {
+				case rebakes <- struct{}{}:
+				default:
+				}
+			},
+		})
 	}()
 	defer wg.Wait()
 	defer cancel()
+	<-ready
 
-	// Watch() publishes before entering its select loop, but it does so on
-	// its own goroutine — poll briefly rather than assuming it has already
-	// run by the time this line executes.
-	deadline := time.Now().Add(2 * time.Second)
-	for idx.published.Load() == nil {
-		if time.Now().After(deadline) {
-			t.Fatalf("expected a published snapshot shortly after Watch() starts")
-		}
-		time.Sleep(5 * time.Millisecond)
+	idx.mu.Lock()
+	builtAtStart := idx.codeSearchBuilt
+	idx.mu.Unlock()
+	if builtAtStart || idx.published.Load() != nil {
+		t.Fatal("starting Watch built or published the search index without a query")
 	}
 
-	resp := SearchCode(idx, "alpha", SearchCodeOptions{Limit: 6, BudgetTokens: 1000})
+	write(t, root, "src/a.ts", `export function alphaRenamed() { return 2 }
+`)
+	select {
+	case <-rebakes:
+	case <-time.After(3 * time.Second):
+		t.Fatal("watcher did not rebake within 3s")
+	}
+	time.Sleep(50 * time.Millisecond)
+	idx.mu.Lock()
+	builtAfterEdit := idx.codeSearchBuilt
+	idx.mu.Unlock()
+	if builtAfterEdit || idx.published.Load() != nil {
+		t.Fatal("idle watch rebake built or published the search index without a query")
+	}
+
+	resp := SearchCode(idx, "alphaRenamed", SearchCodeOptions{Limit: 6, BudgetTokens: 1000})
 	found := false
 	for _, hit := range resp.Hits {
 		if hit.File == "src/a.ts" {
@@ -3872,7 +3893,13 @@ func TestPublishQuerySnapshotWarmsUpAtWatchStart(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("expected warm-started search to find alpha, got %#v", resp.Hits)
+		t.Fatalf("expected lazy search build to reflect the edit, got %#v", resp.Hits)
+	}
+	idx.mu.Lock()
+	builtAfterQuery := idx.codeSearchBuilt
+	idx.mu.Unlock()
+	if !builtAfterQuery {
+		t.Fatal("search request did not build the search index")
 	}
 }
 
@@ -3888,9 +3915,13 @@ func TestPublishQuerySnapshotRefreshesAfterRebake(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if resp := SearchCode(idx, "alpha", SearchCodeOptions{Limit: 6, BudgetTokens: 1000}); len(resp.Hits) == 0 {
+		t.Fatalf("expected initial search to build the lazy cache, got %#v", resp)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ready := make(chan struct{})
 	rebakes := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -3898,6 +3929,7 @@ func TestPublishQuerySnapshotRefreshesAfterRebake(t *testing.T) {
 		defer wg.Done()
 		_ = Watch(ctx, idx, WatchOptions{
 			Debounce: 50 * time.Millisecond,
+			OnReady:  func() { close(ready) },
 			OnRebake: func(updated, removed []string) {
 				select {
 				case rebakes <- struct{}{}:
@@ -3908,14 +3940,7 @@ func TestPublishQuerySnapshotRefreshesAfterRebake(t *testing.T) {
 	}()
 	defer wg.Wait()
 	defer cancel()
-
-	deadline := time.Now().Add(2 * time.Second)
-	for idx.published.Load() == nil {
-		if time.Now().After(deadline) {
-			t.Fatalf("expected a published snapshot shortly after Watch() starts")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	<-ready
 	before := idx.published.Load()
 
 	write(t, root, "src/a.ts", `export function alphaRenamed() { return 2 }
@@ -3926,7 +3951,7 @@ func TestPublishQuerySnapshotRefreshesAfterRebake(t *testing.T) {
 		t.Fatal("watcher did not rebake within 3s")
 	}
 
-	deadline = time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	for idx.published.Load() == before {
 		if time.Now().After(deadline) {
 			t.Fatalf("expected a freshly published snapshot after the rebake")

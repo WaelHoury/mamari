@@ -140,16 +140,10 @@ func TestSemanticIndexInvalidatesAfterWatchRebake(t *testing.T) {
 	}
 }
 
-// TestWatchPrewarmsSemanticIndexWithoutAQuery is the regression guard for the
-// fix in watch.go's triggerSemanticPrewarm: before that fix, every edit during
-// a `--watch` session left the *next* semantic_query/inspect_flow call to pay
-// the full corpus rebuild synchronously. This test starts the
-// real fsnotify-backed Watch() (not rebakeFile, which bypasses the watcher's
-// own flush() entirely), edits a file, waits for the rebake to fire, and
-// asserts idx.semanticIndex becomes populated WITHOUT ever calling
-// SemanticQuery/InspectFlow — proving the rebuild happens proactively on the
-// watcher's own goroutine, not lazily on the next query's critical path.
-func TestWatchPrewarmsSemanticIndexWithoutAQuery(t *testing.T) {
+// TestWatchKeepsSemanticIndexLazyWithoutAQuery guards the idle-resource
+// contract: editor and generator writes are allowed to refresh the live graph,
+// but must not trigger a corpus-wide semantic rebuild until a request needs it.
+func TestWatchKeepsSemanticIndexLazyWithoutAQuery(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "service.js", "function publishAlert() { return true }\n")
 	idx, err := BuildIndex(root)
@@ -161,11 +155,13 @@ func TestWatchPrewarmsSemanticIndexWithoutAQuery(t *testing.T) {
 	defer cancel()
 	var wg sync.WaitGroup
 	wg.Add(1)
+	ready := make(chan struct{})
 	rebakes := make(chan struct{}, 4)
 	go func() {
 		defer wg.Done()
 		_ = Watch(ctx, idx, WatchOptions{
 			Debounce: 50 * time.Millisecond,
+			OnReady:  func() { close(ready) },
 			OnRebake: func(updated, removed []string) {
 				select {
 				case rebakes <- struct{}{}:
@@ -177,7 +173,7 @@ func TestWatchPrewarmsSemanticIndexWithoutAQuery(t *testing.T) {
 	defer wg.Wait()
 	defer cancel()
 
-	time.Sleep(150 * time.Millisecond) // let the watcher register dirs
+	<-ready
 	write(t, root, "service.js", "function storeDocument() { return true }\n")
 	select {
 	case <-rebakes:
@@ -185,27 +181,18 @@ func TestWatchPrewarmsSemanticIndexWithoutAQuery(t *testing.T) {
 		t.Fatal("watcher did not rebake within 3s")
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		idx.mu.Lock()
-		sem := idx.semanticIndex
-		idx.mu.Unlock()
-		if sem != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("expected the watcher to prewarm the semantic index without a query, but it stayed nil")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	// The prewarmed index must actually reflect the edit (not a stale build
-	// of the pre-edit content the watcher raced past).
+	// OnRebake runs just before flush finishes. Give any accidentally spawned
+	// background work time to publish so this catches a prewarm regression.
+	time.Sleep(100 * time.Millisecond)
 	idx.mu.Lock()
 	sem := idx.semanticIndex
 	idx.mu.Unlock()
-	hashesOK := semanticHashesMatch(idx, sem.FileHashes)
-	if !hashesOK {
-		t.Fatal("prewarmed semantic index does not match the post-edit file hashes")
+	if sem != nil {
+		t.Fatal("watch rebake built the semantic index without a query")
+	}
+
+	resp := SemanticQuery(idx, "store document", SemanticQueryOptions{Limit: 3})
+	if resp.Status != "ok" || len(resp.Hits) == 0 || resp.Hits[0].Symbol.Name != "storeDocument" {
+		t.Fatalf("lazy semantic build did not reflect the edited source: %#v", resp)
 	}
 }
