@@ -2,8 +2,6 @@ package mamari
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -68,7 +66,7 @@ func readSourceLines(idx *Index, file string) ([]string, error) {
 	idx.mu.Lock()
 	root := idx.Repo.Root
 	idx.mu.Unlock()
-	data, err := os.ReadFile(filepath.Join(root, file))
+	data, err := readRepoFile(root, file)
 	if err != nil {
 		return nil, err
 	}

@@ -99,30 +99,28 @@ func Watch(ctx context.Context, idx *Index, opts WatchOptions) error {
 			}
 		}
 		updated, removed, err := rebakeChangedFiles(idx, root, requestedUpdates, requestedRemoves)
-		if err != nil && opts.OnError != nil {
-			opts.OnError(err)
+		if err != nil {
+			if opts.OnError != nil {
+				opts.OnError(err)
+			}
+			return
 		}
 		idx.recordRebake(updated, removed)
 		if opts.OnRebake != nil {
 			opts.OnRebake(updated, removed)
 		}
-		if err == nil {
-			// Refresh the lock-free query snapshot on the watcher's own
-			// goroutine, off any concurrent query's critical path — see
-			// publishQuerySnapshot. Skipped after an error: rebakeChangedFiles
-			// may have left CGP scanning partway through for the failed
-			// file(s), and publishing from that state could hand readers a
-			// snapshot reflecting a half-applied edit.
-			changed := append(append([]string(nil), updated...), removed...)
-			// Search and semantic indexes are intentionally lazy. Filesystem
-			// activity can happen while no agent is using the server (editor
-			// saves, branch switches, generators), and must not trigger a
-			// whole-repository warm-up. If search has already been used, its
-			// per-file cache was refreshed by rebakeChangedFiles and publishing
-			// the replacement remains cheap. Otherwise the next search request
-			// builds from the latest live graph on demand.
-			idx.publishQuerySnapshotIfBuilt(changed)
-		}
+		// Refresh the lock-free query snapshot on the watcher's own
+		// goroutine, off any concurrent query's critical path — see
+		// publishQuerySnapshot.
+		changed := append(append([]string(nil), updated...), removed...)
+		// Search and semantic indexes are intentionally lazy. Filesystem
+		// activity can happen while no agent is using the server (editor
+		// saves, branch switches, generators), and must not trigger a
+		// whole-repository warm-up. If search has already been used, its
+		// per-file cache was refreshed by rebakeChangedFiles and publishing
+		// the replacement remains cheap. Otherwise the next search request
+		// builds from the latest live graph on demand.
+		idx.publishQuerySnapshotIfBuilt(changed)
 	}
 
 	for {
@@ -243,7 +241,7 @@ func queueIndexReconciliation(idx *Index, root string, pending *pendingSet) (boo
 	queued := false
 	for _, rel := range files {
 		onDisk[rel] = true
-		data, err := os.ReadFile(filepath.Join(root, rel))
+		data, err := readRepoFile(root, rel)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
@@ -354,46 +352,65 @@ func rebakeChangedFiles(idx *Index, root string, requestedUpdates, requestedRemo
 		return nil, nil, nil
 	}
 
+	// Read every update before mutating live state. A permissions error,
+	// external symlink, or transient I/O failure must leave the last good
+	// graph intact instead of applying removals and then aborting halfway.
+	contents := map[string]string{}
+	languages := map[string]string{}
+	var missing []string
+	removedSet := make(map[string]bool, len(removeSet))
+	for rel := range removeSet {
+		removedSet[rel] = true
+	}
+	for rel := range updateSet {
+		path, pathErr := resolvedRepoFilePath(root, rel)
+		if pathErr != nil {
+			if errors.Is(pathErr, fs.ErrNotExist) {
+				missing = append(missing, rel)
+				continue
+			}
+			return nil, nil, pathErr
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			if errors.Is(statErr, fs.ErrNotExist) {
+				missing = append(missing, rel)
+				continue
+			}
+			return nil, nil, statErr
+		}
+		if shouldSkipLargeGeneratedArtifactInfo(rel, info) {
+			removedSet[rel] = true
+			delete(updateSet, rel)
+			delete(preserveExternalCGPEdges, rel)
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				missing = append(missing, rel)
+				continue
+			}
+			return nil, nil, err
+		}
+		contents[rel] = string(data)
+		languages[rel] = languageForContent(rel, data)
+	}
+	for _, rel := range missing {
+		delete(updateSet, rel)
+		delete(preserveExternalCGPEdges, rel)
+		removedSet[rel] = true
+	}
+
 	// Detach once for the complete rebake. The previously published graph
 	// remains immutable and queryable until the replacement is fully built;
 	// thousands of AddCGPSymbol/AddCGPEdge calls below therefore pay one
 	// graph copy for the batch rather than one copy per mutation or query.
 	idx.beginSymbolGraphMutation(true)
 
-	var removed []string
-	for rel := range removeSet {
+	removed := make([]string, 0, len(removedSet))
+	for rel := range removedSet {
 		dropFile(idx, rel)
-		removed = append(removed, rel)
-	}
-
-	contents := map[string]string{}
-	languages := map[string]string{}
-	var missing []string
-	for rel := range updateSet {
-		abs := filepath.Join(root, rel)
-		info, statErr := os.Stat(abs)
-		if statErr == nil && shouldSkipLargeGeneratedArtifactInfo(rel, info) {
-			dropFile(idx, rel)
-			removed = append(removed, rel)
-			delete(updateSet, rel)
-			delete(preserveExternalCGPEdges, rel)
-			continue
-		}
-		data, err := os.ReadFile(abs)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				missing = append(missing, rel)
-				continue
-			}
-			return nil, removed, err
-		}
-		contents[rel] = string(data)
-		languages[rel] = languageForContent(rel, data)
-	}
-	for _, rel := range missing {
-		dropFile(idx, rel)
-		delete(updateSet, rel)
-		delete(preserveExternalCGPEdges, rel)
 		removed = append(removed, rel)
 	}
 	for rel := range updateSet {
@@ -514,7 +531,7 @@ func shouldRebakeDependentsForUpdate(idx *Index, root, rel string) bool {
 	default:
 		return true
 	}
-	data, err := os.ReadFile(filepath.Join(root, rel))
+	data, err := readRepoFile(root, rel)
 	if err != nil {
 		return true
 	}
@@ -692,7 +709,7 @@ func (idx *Index) ensureCodeNamespaceCache(root string, changedContent map[strin
 		sort.Strings(toRead)
 		toRead = compactSortedStrings(toRead)
 		for _, rel := range toRead {
-			data, err := os.ReadFile(filepath.Join(root, rel))
+			data, err := readRepoFile(root, rel)
 			if err != nil {
 				continue
 			}

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -564,7 +563,7 @@ func reviewClassifyChangeKinds(root, base string, changedFiles map[string]bool, 
 				}
 			}
 		}
-		if b, err := os.ReadFile(filepath.Join(root, f)); err == nil {
+		if b, err := readRepoFile(root, f); err == nil {
 			bi.cur = strings.Split(string(b), "\n")
 		}
 		fileInfo[f] = bi

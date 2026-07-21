@@ -2,8 +2,6 @@ package mamari
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -271,7 +269,7 @@ func compactSymbolSource(idx *Index, sym CGPSymbol, maxLines, budgetTokens int) 
 	idx.mu.Lock()
 	root := idx.Repo.Root
 	idx.mu.Unlock()
-	data, err := os.ReadFile(filepath.Join(root, sym.File))
+	data, err := readRepoFile(root, sym.File)
 	if err != nil {
 		return "", false, err
 	}

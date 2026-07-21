@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sort"
+	"strings"
 	"testing"
 	"unsafe"
 )
@@ -162,6 +163,31 @@ func TestCodeSearchPostingCompressionRoundTripsWithoutRangeLimits(t *testing.T) 
 func TestCodeSearchLineUsesFixedWidthSourceAndSymbolReferences(t *testing.T) {
 	if got, wantMax := unsafe.Sizeof(codeSearchLine{}), uintptr(64); got > wantMax {
 		t.Fatalf("codeSearchLine size=%d bytes, want <=%d", got, wantMax)
+	}
+}
+
+func TestCodeSearchSkipsOversizedStructuredDataWithoutDroppingItFromIndex(t *testing.T) {
+	root := t.TempDir()
+	content := "@prefix ex: <http://example.test/> .\n" + strings.Repeat("# generated vocabulary data\n", int(maxSearchableStructuredDataBytes/28)+1)
+	write(t, root, "public/vocabularies/oversized.ttl", content)
+	write(t, root, "src/app.ts", "export function searchableApplicationCode() { return 1 }\n")
+	idx, err := BuildIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.Files["public/vocabularies/oversized.ttl"]; !ok {
+		t.Fatal("oversized structured data should remain graph-indexed")
+	}
+	resp := SearchCode(idx, "searchableApplicationCode", SearchCodeOptions{})
+	if resp.Status != "ok" || len(resp.Hits) == 0 {
+		t.Fatalf("ordinary source search failed: %#v", resp)
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	for _, file := range idx.codeSearchFiles {
+		if file.file == "public/vocabularies/oversized.ttl" {
+			t.Fatal("oversized structured data entered the lexical line cache")
+		}
 	}
 }
 

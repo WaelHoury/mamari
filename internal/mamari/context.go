@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -950,7 +949,7 @@ func ReadIndexSourceLine(idx *Index, file string, line int) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("file is not indexed: %s", file)
 	}
-	data, err := os.ReadFile(filepath.Join(root, file))
+	data, err := readRepoFile(root, file)
 	if err != nil {
 		return "", err
 	}

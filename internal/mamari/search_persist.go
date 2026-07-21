@@ -11,7 +11,7 @@ import (
 // searchSidecarBinaryMagic mirrors indexBinaryMagic's role for the main
 // index (index.go): a header so loadCodeSearchSidecar can tell a real
 // sidecar from anything else without depending on file extension.
-var searchSidecarBinaryMagic = []byte("mamari-search-v1\n")
+var searchSidecarBinaryMagic = []byte("mamari-search-v3\n")
 
 type persistedCodeSearchIndex struct {
 	SchemaVersion int
@@ -34,15 +34,22 @@ type persistedCodeSearchFile struct {
 	PathTokens []string
 	BaseTokens []string
 	TokenCount int
-	Lines      []persistedCodeSearchLine
+	// Symbols are stored once per file. The v1 format embedded complete
+	// CGPSymbolSummary values on every source line covered by a symbol; a
+	// long class or method therefore duplicated the same strings hundreds of
+	// times on disk and again while gob decoded it. Lines now retain only
+	// fixed-width spans into LineSymbolIndexes, matching the in-memory form.
+	Symbols           []CGPSymbolSummary
+	LineSymbolIndexes []uint32
+	Lines             []persistedCodeSearchLine
 }
 
 type persistedCodeSearchLine struct {
-	Number     int
-	Text       string
-	Tokens     []string
-	Symbols    []CGPSymbolSummary
-	SymbolText []string
+	Text        string
+	Tokens      string
+	SymbolText  string
+	SymbolStart uint32
+	SymbolCount uint8
 }
 
 // saveCodeSearchSidecar persists idx's tokenized search-code file cache as a
@@ -65,27 +72,29 @@ func saveCodeSearchSidecar(idx *Index, path string) error {
 		Files:         make([]persistedCodeSearchFile, 0, len(files)),
 	}
 	for _, meta := range snap.Files {
-		if searchableCodeLanguage(meta.Language) {
+		if searchableCodeFile(meta, snap.Repo.Root) {
 			payload.FileHashes[meta.Path] = meta.SHA256
 		}
 	}
 	for _, file := range files {
 		pf := persistedCodeSearchFile{
-			File:       file.file,
-			PostingID:  file.postingID,
-			Language:   file.language,
-			PathTokens: mapKeys(file.pathTokens),
-			BaseTokens: mapKeys(file.baseTokens),
-			TokenCount: file.tokenCount,
-			Lines:      make([]persistedCodeSearchLine, 0, len(file.lines)),
+			File:              file.file,
+			PostingID:         file.postingID,
+			Language:          file.language,
+			PathTokens:        mapKeys(file.pathTokens),
+			BaseTokens:        mapKeys(file.baseTokens),
+			TokenCount:        file.tokenCount,
+			Symbols:           dereferenceSymbolSummaries(file.symbolSummaries),
+			LineSymbolIndexes: append([]uint32(nil), file.lineSymbolIndexes...),
+			Lines:             make([]persistedCodeSearchLine, 0, len(file.lines)),
 		}
-		for lineIndex, line := range file.lines {
+		for _, line := range file.lines {
 			pf.Lines = append(pf.Lines, persistedCodeSearchLine{
-				Number:     lineIndex + 1,
-				Text:       file.lineText(line),
-				Tokens:     line.tokens.strings(),
-				Symbols:    dereferenceSymbolSummaries(file.lineSymbols(line, nil)),
-				SymbolText: line.symbolText.strings(),
+				Text:        file.lineText(line),
+				Tokens:      string(line.tokens),
+				SymbolText:  string(line.symbolText),
+				SymbolStart: line.symbolStart,
+				SymbolCount: line.symbolCount,
 			})
 		}
 		payload.Files = append(payload.Files, pf)
@@ -95,7 +104,7 @@ func saveCodeSearchSidecar(idx *Index, path string) error {
 	if err := gob.NewEncoder(&buf).Encode(&payload); err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return writeFileAtomic(path, buf.Bytes(), 0o644)
 }
 
 // loadCodeSearchSidecar reads path (if it exists, matches the current
@@ -117,53 +126,73 @@ func loadCodeSearchSidecar(idx *Index, path string) bool {
 		return false
 	}
 	files := make([]codeSearchFile, 0, len(payload.Files))
+	postingIDs := make(map[uint32]bool, len(payload.Files))
+	filePaths := make(map[string]bool, len(payload.Files))
 	for i, pf := range payload.Files {
+		if _, ok := payload.FileHashes[pf.File]; !ok || filePaths[pf.File] {
+			return false
+		}
+		filePaths[pf.File] = true
 		postingID := pf.PostingID
 		if postingID == 0 {
 			postingID = uint32(i + 1)
 		}
+		if postingIDs[postingID] {
+			return false
+		}
+		postingIDs[postingID] = true
+		summaryCache := map[string]*CGPSymbolSummary{}
 		cf := codeSearchFile{
-			file:       pf.File,
-			language:   pf.Language,
-			postingID:  postingID,
-			pathTokens: sliceSet(pf.PathTokens),
-			baseTokens: sliceSet(pf.BaseTokens),
-			tokenCount: pf.TokenCount,
-			lines:      make([]codeSearchLine, 0, len(pf.Lines)),
+			file:              pf.File,
+			language:          pf.Language,
+			postingID:         postingID,
+			pathTokens:        sliceSet(pf.PathTokens),
+			baseTokens:        sliceSet(pf.BaseTokens),
+			tokenCount:        pf.TokenCount,
+			symbolSummaries:   internSymbolSummaries(pf.Symbols, summaryCache),
+			lineSymbolIndexes: append([]uint32(nil), pf.LineSymbolIndexes...),
+			lines:             make([]codeSearchLine, 0, len(pf.Lines)),
+		}
+		for _, index := range cf.lineSymbolIndexes {
+			if int(index) >= len(cf.symbolSummaries) {
+				return false
+			}
 		}
 		var source strings.Builder
 		allTokens := map[string]bool{}
 		mergeSearchTokens(allTokens, cf.pathTokens)
 		mergeSearchTokens(allTokens, cf.baseTokens)
-		// Re-memoize by symbol ID on load too, exactly like
-		// searchSymbolsByLine does on a fresh build — the persisted gob
-		// format stores one value per line (byte-compatible, simple), but
-		// loading each line's symbols independently would silently
-		// reintroduce the per-line duplication a sidecar-loaded index is
-		// specifically meant to avoid paying for again.
-		summaryCache := map[string]*CGPSymbolSummary{}
-		summaryIndexes := map[*CGPSymbolSummary]uint32{}
 		for _, line := range pf.Lines {
-			mergeTokensFromSlice(allTokens, line.Tokens)
-			mergeTokensFromSlice(allTokens, line.SymbolText)
-			lineSymbols := internSymbolSummaries(line.Symbols, summaryCache)
-			symbolStart, symbolCount := appendCodeSearchLineSymbols(&cf, lineSymbols, summaryIndexes)
+			lineTokens := compactTokenSet(line.Tokens)
+			symbolText := compactTokenSet(line.SymbolText)
+			lineTokens.forEach(func(token string) { allTokens[token] = true })
+			symbolText.forEach(func(token string) { allTokens[token] = true })
+			symbolEnd := uint64(line.SymbolStart) + uint64(line.SymbolCount)
+			if symbolEnd > uint64(len(cf.lineSymbolIndexes)) {
+				return false
+			}
 			textStart := source.Len()
 			source.WriteString(line.Text)
+			if uint64(source.Len()) > uint64(^uint32(0)) {
+				return false
+			}
 			cf.lines = append(cf.lines, codeSearchLine{
 				textStart:   uint32(textStart),
 				textEnd:     uint32(source.Len()),
-				tokenBloom:  compactTokenBloom(line.Tokens),
-				symbolBloom: compactTokenBloom(line.SymbolText),
-				tokens:      packCompactTokenSet(line.Tokens),
-				symbolText:  packCompactTokenSet(line.SymbolText),
-				symbolStart: symbolStart,
-				symbolCount: symbolCount,
+				tokenBloom:  compactTokenSetBloom(lineTokens),
+				symbolBloom: compactTokenSetBloom(symbolText),
+				tokens:      lineTokens,
+				symbolText:  symbolText,
+				symbolStart: line.SymbolStart,
+				symbolCount: line.SymbolCount,
 			})
 		}
 		cf.source = source.String()
 		cf.allTokens = packCompactTokenSet(mapKeys(allTokens))
 		files = append(files, cf)
+	}
+	if len(filePaths) != len(payload.FileHashes) {
+		return false
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].file < files[j].file })
 	internCodeSearchFiles(files)
@@ -177,12 +206,18 @@ func loadCodeSearchSidecar(idx *Index, path string) bool {
 	return true
 }
 
+func compactTokenSetBloom(tokens compactTokenSet) uint64 {
+	var bloom uint64
+	tokens.forEach(func(token string) { bloom |= searchTokenBloom(token) })
+	return bloom
+}
+
 func codeSearchSidecarMatches(idx *Index, hashes map[string]string) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	want := map[string]string{}
 	for _, meta := range idx.Files {
-		if searchableCodeLanguage(meta.Language) {
+		if searchableCodeFile(meta, idx.Repo.Root) {
 			want[meta.Path] = meta.SHA256
 		}
 	}

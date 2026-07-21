@@ -82,12 +82,17 @@ func ServeWithOptions(indexPath string, opts ServeOptions) error {
 	// gob scratch resident for the lifetime of the server.
 	idx.ReleaseUnusedMemory()
 	s := newMCPServer(idx, linked, opts)
+	var watchCancel context.CancelFunc
+	var watchStopped chan error
+	watchRunning := false
 	if opts.Watch {
 		capabilities := currentAdaptiveCapabilities(idx)
 		watchReady := make(chan struct{})
-		watchStopped := make(chan error, 1)
+		watchStopped = make(chan error, 1)
+		watchCtx, cancel := context.WithCancel(context.Background())
+		watchCancel = cancel
 		go func() {
-			err := mamari.Watch(context.Background(), idx, mamari.WatchOptions{
+			err := mamari.Watch(watchCtx, idx, mamari.WatchOptions{
 				Debounce: opts.Debounce,
 				OnReady: func() {
 					close(watchReady)
@@ -120,10 +125,21 @@ func ServeWithOptions(indexPath string, opts ServeOptions) error {
 		// serving the immutable loaded index.
 		select {
 		case <-watchReady:
+			watchRunning = true
 		case <-watchStopped:
+			watchCancel()
 		}
 	}
-	return server.ServeStdio(s)
+	err = server.ServeStdio(s)
+	if watchCancel != nil {
+		watchCancel()
+		if watchRunning {
+			// Wait for Watch to close its fsnotify descriptor before an
+			// embedding process starts another server against the same repo.
+			<-watchStopped
+		}
+	}
+	return err
 }
 
 const (

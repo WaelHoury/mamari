@@ -21,6 +21,12 @@ const (
 	defaultSearchCodeBudgetTokens = 1200
 	defaultSearchCodeContextLines = 1
 	maxSearchCodeCacheEntries     = 128
+	// Large Turtle/YAML/HCL files are commonly generated vocabularies,
+	// datasets, state, or lock data rather than source an agent should scan
+	// lexically. Their RDF terms/literals remain available through Mamari's
+	// graph and literal tools; excluding only the line-token cache prevents a
+	// few data files from dominating cold-search CPU and memory.
+	maxSearchableStructuredDataBytes = int64(2 << 20)
 )
 
 var searchTokenRe = regexp.MustCompile(`[A-Za-z0-9]+`)
@@ -68,12 +74,14 @@ var searchStopWords = map[string]bool{
 }
 
 var searchQueryExpansions = map[string][]string{
-	"avoid":     {"guard", "skip", "block", "prevent"},
-	"duplicate": {"double", "repeat", "repeated", "once", "idempotent"},
-	"prevent":   {"guard", "skip", "block", "avoid"},
-	"repeat":    {"duplicate", "repeated", "again"},
-	"repeated":  {"duplicate", "repeat", "again"},
-	"running":   {"run", "active", "started"},
+	"avoid":      {"guard", "skip", "block", "prevent"},
+	"duplicate":  {"double", "repeat", "repeated", "once", "idempotent"},
+	"prevent":    {"guard", "skip", "block", "avoid"},
+	"repeat":     {"duplicate", "repeated", "again"},
+	"repeated":   {"duplicate", "repeat", "again"},
+	"running":    {"run", "active", "started"},
+	"validate":   {"validation", "validator", "valid"},
+	"validation": {"validate", "validator", "valid"},
 }
 
 var lifecycleQueryCueTerms = map[string]bool{
@@ -348,13 +356,6 @@ func (set compactTokenSet) forEach(visit func(string)) {
 		visit(text[start:end])
 		start = end + 1
 	}
-}
-
-func (set compactTokenSet) strings() []string {
-	if len(set) == 0 {
-		return nil
-	}
-	return strings.Split(string(set), "\x00")
 }
 
 func searchTokenBloom(token string) uint64 {
@@ -1375,7 +1376,7 @@ func (idx *Index) ensureCodeSearchIndex() []codeSearchFile {
 	idx.mu.Lock()
 	fileMetas := make([]File, 0, len(idx.Files))
 	for _, meta := range idx.Files {
-		if searchableCodeLanguage(meta.Language) {
+		if searchableCodeFile(meta, idx.Repo.Root) {
 			fileMetas = append(fileMetas, meta)
 		}
 	}
@@ -1524,10 +1525,10 @@ func internCodeSearchFile(file *codeSearchFile, interner map[string]string) {
 // updateCodeSearchIndexForFiles path so a single-file edit re-tokenizes only
 // that file, not the whole repo.
 func buildCodeSearchFile(meta File, symbols []CGPSymbol, root string, symbolTokenCache map[string][]string) (codeSearchFile, bool) {
-	if !searchableCodeLanguage(meta.Language) {
+	if !searchableCodeFile(meta, root) {
 		return codeSearchFile{}, false
 	}
-	content, err := os.ReadFile(filepath.Join(root, meta.Path))
+	content, err := readRepoFile(root, meta.Path)
 	if err != nil {
 		return codeSearchFile{}, false
 	}
@@ -1979,6 +1980,30 @@ func searchableCodeLanguage(lang string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func searchableCodeFile(meta File, root string) bool {
+	if !searchableCodeLanguage(meta.Language) {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(meta.Path))
+	if base == "pnpm-lock.yaml" || base == "pnpm-lock.yml" || base == "chart.lock" {
+		return false
+	}
+	switch meta.Language {
+	case "ttl", "yaml", "hcl":
+		path, err := resolvedRepoFilePath(root, meta.Path)
+		if err != nil {
+			return false
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return false
+		}
+		return info.Size() <= maxSearchableStructuredDataBytes
+	default:
+		return true
 	}
 }
 

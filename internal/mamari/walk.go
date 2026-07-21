@@ -80,6 +80,12 @@ func WalkRepo(root string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if _, err := resolvedRepoFilePath(root, rel); err != nil {
+				// Never index a symlink whose final target leaves the repo.
+				return nil
+			}
+		}
 		if (isIndexableSourceFile(rel) || isShellShebangFile(path)) && !shouldSkipLargeGeneratedArtifact(rel, d) {
 			files = append(files, rel)
 		}

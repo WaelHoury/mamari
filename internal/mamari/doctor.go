@@ -3,7 +3,6 @@ package mamari
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -95,7 +94,7 @@ func detectContentStaleness(root string, files map[string]File) (changed, delete
 		if f.SHA256 == "" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(root, path))
+		data, err := readRepoFile(root, path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				deleted = append(deleted, path)

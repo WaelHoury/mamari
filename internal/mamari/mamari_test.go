@@ -3,10 +3,12 @@ package mamari
 import (
 	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -88,6 +90,75 @@ func TestFetchSource(t *testing.T) {
 	}
 	if resp.Text != "two\nthree\n" {
 		t.Fatalf("text = %q", resp.Text)
+	}
+}
+
+func TestRepositoryReadsRejectSymlinksOutsideRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation commonly requires elevated Windows privileges")
+	}
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.ts")
+	if err := os.WriteFile(outside, []byte("export const privateValue = 42\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape.ts")); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.Files["escape.ts"]; ok {
+		t.Fatal("BuildIndex followed a source symlink outside the repository")
+	}
+
+	write(t, root, "safe.ts", "export const safeValue = 1\n")
+	idx, err = BuildIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "safe.ts")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "safe.ts")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := FetchSource(idx, "safe.ts", 1, 1); err == nil || !strings.Contains(err.Error(), "inside the indexed repo") {
+		t.Fatalf("FetchSource external symlink error=%v", err)
+	}
+}
+
+func TestFailedRebakeReadLeavesLastGoodBatchIntact(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation commonly requires elevated Windows privileges")
+	}
+	root := t.TempDir()
+	write(t, root, "keep.ts", "export const keep = 1\n")
+	write(t, root, "change.ts", "export const before = 1\n")
+	idx, err := BuildIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "outside.ts")
+	if err := os.WriteFile(out, []byte("export const outside = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "change.ts")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(out, filepath.Join(root, "change.ts")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := rebakeChangedFiles(idx, root, []string{"change.ts"}, []string{"keep.ts"}); err == nil {
+		t.Fatal("rebake unexpectedly accepted an external source symlink")
+	}
+	if _, ok := idx.Files["keep.ts"]; !ok {
+		t.Fatal("failed rebake applied a removal from the same batch")
+	}
+	if got := idx.Files["change.ts"].SHA256; got != hash([]byte("export const before = 1\n")) {
+		t.Fatal("failed rebake replaced the last good indexed source")
 	}
 }
 
@@ -190,6 +261,48 @@ func TestSaveIndexCanPersistCodeSearchSidecarWhenEnabled(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, ".mamari", "search.json")); err != nil {
 		t.Fatalf("expected opt-in persisted search sidecar: %v", err)
+	}
+}
+
+func TestCodeSearchSidecarStoresSymbolSummariesOncePerFile(t *testing.T) {
+	root := t.TempDir()
+	var source strings.Builder
+	source.WriteString("export function longRunningHandler(input: number) {\n")
+	for i := 0; i < 400; i++ {
+		source.WriteString("  input += 1\n")
+	}
+	source.WriteString("  return input\n}\n")
+	write(t, root, "src/long.ts", source.String())
+
+	idx, err := BuildIndex(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MAMARI_PERSIST_SEARCH", "1")
+	indexPath := filepath.Join(root, ".mamari", "index.json")
+	if err := SaveIndex(idx, indexPath); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".mamari", "search.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(data, searchSidecarBinaryMagic) {
+		t.Fatalf("search sidecar does not use the current binary format")
+	}
+	var payload persistedCodeSearchIndex
+	if err := gob.NewDecoder(bytes.NewReader(data[len(searchSidecarBinaryMagic):])).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Files) != 1 {
+		t.Fatalf("persisted files=%d, want 1", len(payload.Files))
+	}
+	file := payload.Files[0]
+	if len(file.Lines) < 400 || len(file.Symbols) == 0 {
+		t.Fatalf("unexpected persisted search shape: lines=%d symbols=%d", len(file.Lines), len(file.Symbols))
+	}
+	if len(file.Symbols) >= len(file.Lines) {
+		t.Fatalf("symbol summaries were duplicated per line: symbols=%d lines=%d", len(file.Symbols), len(file.Lines))
 	}
 }
 

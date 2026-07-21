@@ -308,7 +308,7 @@ func semanticDocuments(snap indexSnapshot) []semanticDocument {
 		parts := append([]string(nil), identityParts...)
 		lines, ok := fileLines[sym.File]
 		if !ok {
-			data, err := os.ReadFile(filepath.Join(snap.Repo.Root, filepath.FromSlash(sym.File)))
+			data, err := readRepoFile(snap.Repo.Root, sym.File)
 			if err == nil {
 				lines = strings.Split(string(data), "\n")
 			}
@@ -613,7 +613,7 @@ func saveSemanticSidecar(idx *Index, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return writeFileAtomic(path, buf.Bytes(), 0o644)
 }
 
 func loadSemanticSidecar(idx *Index, path string) *semanticIndex {

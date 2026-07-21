@@ -5,9 +5,36 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
+
+func TestResolveVersionMetadataUsesGoInstallBuildInfo(t *testing.T) {
+	read := func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			Main: debug.Module{Version: "v0.0.0-20260720194500-c5a160e892c5"},
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: "c5a160e892c5abcdef"},
+				{Key: "vcs.time", Value: "2026-07-20T19:45:00Z"},
+			},
+		}, true
+	}
+	gotVersion, gotCommit, gotDate := resolveVersionMetadata("dev", "unknown", "unknown", read)
+	if gotVersion != "v0.0.0-20260720194500-c5a160e892c5" || gotCommit != "c5a160e892c5abcdef" || gotDate != "2026-07-20T19:45:00Z" {
+		t.Fatalf("resolved metadata = (%q, %q, %q)", gotVersion, gotCommit, gotDate)
+	}
+}
+
+func TestResolveVersionMetadataPreservesReleaseLinkerFlags(t *testing.T) {
+	read := func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{Main: debug.Module{Version: "v0.0.0-ignored"}}, true
+	}
+	gotVersion, gotCommit, gotDate := resolveVersionMetadata("v0.2.0", "release-commit", "release-date", read)
+	if gotVersion != "v0.2.0" || gotCommit != "release-commit" || gotDate != "release-date" {
+		t.Fatalf("release metadata was replaced: (%q, %q, %q)", gotVersion, gotCommit, gotDate)
+	}
+}
 
 // initGitRepo initializes a git repo with a fixed commit identity, so tests
 // don't depend on the host's global git config.

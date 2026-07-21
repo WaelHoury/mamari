@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -262,20 +263,50 @@ func runVersion(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	resolvedVersion, resolvedCommit, resolvedDate := resolveVersionMetadata(version, commit, date, debug.ReadBuildInfo)
 	info := map[string]any{
-		"version":       version,
-		"commit":        commit,
-		"date":          date,
+		"version":       resolvedVersion,
+		"commit":        resolvedCommit,
+		"date":          resolvedDate,
 		"schemaVersion": mamari.SchemaVersion,
 	}
 	if *asJSON {
 		return printJSON(info)
 	}
-	fmt.Printf("mamari %s\n", version)
-	fmt.Printf("commit: %s\n", commit)
-	fmt.Printf("date: %s\n", date)
+	fmt.Printf("mamari %s\n", resolvedVersion)
+	fmt.Printf("commit: %s\n", resolvedCommit)
+	fmt.Printf("date: %s\n", resolvedDate)
 	fmt.Printf("schemaVersion: %d\n", mamari.SchemaVersion)
 	return nil
+}
+
+// resolveVersionMetadata preserves release linker flags while making binaries
+// installed with `go install module/cmd@version` self-identifying. Those
+// builds do not receive GoReleaser's -X flags, but Go records the selected
+// module version (including pseudo-versions) in the executable's build info.
+// Local VCS builds can additionally supply vcs.revision and vcs.time.
+func resolveVersionMetadata(linkedVersion, linkedCommit, linkedDate string, readBuildInfo func() (*debug.BuildInfo, bool)) (string, string, string) {
+	resolvedVersion, resolvedCommit, resolvedDate := linkedVersion, linkedCommit, linkedDate
+	info, ok := readBuildInfo()
+	if !ok || info == nil {
+		return resolvedVersion, resolvedCommit, resolvedDate
+	}
+	if (resolvedVersion == "" || resolvedVersion == "dev") && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		resolvedVersion = info.Main.Version
+	}
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			if resolvedCommit == "" || resolvedCommit == "unknown" {
+				resolvedCommit = setting.Value
+			}
+		case "vcs.time":
+			if resolvedDate == "" || resolvedDate == "unknown" {
+				resolvedDate = setting.Value
+			}
+		}
+	}
+	return resolvedVersion, resolvedCommit, resolvedDate
 }
 
 func runSetupMCP(args []string) error {
@@ -1806,10 +1837,11 @@ func parseServeCommand(args []string) (serveCommandConfig, error) {
 	if memoryLimitBytes > 0 {
 		memoryLimitBytes <<= 20
 	}
+	resolvedVersion, _, _ := resolveVersionMetadata(version, commit, date, debug.ReadBuildInfo)
 	return serveCommandConfig{
 		indexPath: *indexPath,
 		options: mcpserver.ServeOptions{
-			ServerVersion:    version,
+			ServerVersion:    resolvedVersion,
 			Watch:            *watch,
 			Debounce:         time.Duration(*debounceMs) * time.Millisecond,
 			Persist:          *persist,

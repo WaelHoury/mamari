@@ -11,9 +11,9 @@ func FetchSource(idx *Index, file string, startLine, endLine int) (FetchSourceRe
 	if startLine < 1 || endLine < startLine {
 		return FetchSourceResponse{}, fmt.Errorf("invalid line range")
 	}
-	rel := filepath.ToSlash(filepath.Clean(file))
-	if strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
-		return FetchSourceResponse{}, fmt.Errorf("file must be inside the indexed repo")
+	rel, err := cleanRepoRelativePath(file)
+	if err != nil {
+		return FetchSourceResponse{}, err
 	}
 	idx.mu.Lock()
 	fileInfo, ok := idx.Files[rel]
@@ -22,7 +22,7 @@ func FetchSource(idx *Index, file string, startLine, endLine int) (FetchSourceRe
 	if !ok {
 		return FetchSourceResponse{}, fmt.Errorf("file is not indexed: %s", rel)
 	}
-	data, err := os.ReadFile(filepath.Join(root, rel))
+	data, err := readRepoFile(root, rel)
 	if err != nil {
 		return FetchSourceResponse{}, err
 	}
@@ -37,6 +37,46 @@ func FetchSource(idx *Index, file string, startLine, endLine int) (FetchSourceRe
 		EndLine:   endLine,
 		Text:      strings.Join(lines[startLine-1:endLine], ""),
 	}, nil
+}
+
+func cleanRepoRelativePath(file string) (string, error) {
+	rel := filepath.Clean(filepath.FromSlash(file))
+	if rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("file must be inside the indexed repo")
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+// resolvedRepoFilePath follows symlinks and verifies that the final target is
+// still beneath root. Repositories are often opened before they are trusted;
+// a tracked `secret.ts -> ../../outside` symlink must not let an MCP source or
+// search request read arbitrary files from the user's machine.
+func resolvedRepoFilePath(root, file string) (string, error) {
+	rel, err := cleanRepoRelativePath(file)
+	if err != nil {
+		return "", err
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	realPath, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", err
+	}
+	within, err := filepath.Rel(realRoot, realPath)
+	if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) || filepath.IsAbs(within) {
+		return "", fmt.Errorf("file must be inside the indexed repo")
+	}
+	return realPath, nil
+}
+
+func readRepoFile(root, file string) ([]byte, error) {
+	path, err := resolvedRepoFilePath(root, file)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
 }
 
 func lineStarts(content string) []int {

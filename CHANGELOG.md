@@ -6,12 +6,37 @@ versioning for public releases.
 
 ## [Unreleased]
 
+### Changed
+
+- Lexical code search now excludes known lock data and structured-data files
+  larger than 2 MiB. Those files remain part of the repository graph and RDF
+  index, but no longer dominate cold-search CPU and memory.
+- The opt-in search sidecar uses a compact v3 representation that stores
+  symbol summaries once per file and reconstructs derived token filters while
+  loading.
+- Natural-language validation queries now match `validate`, `validation`, and
+  `validator` forms consistently.
+
 ### Fixed
 
 - Long-running MCP servers no longer build repository-wide lexical and
   semantic search caches merely because the server started or a watched file
   changed. Both caches remain lazy until an agent requests them; caches that
   have already been used still receive incremental watch updates.
+- `go install ...@latest` binaries now report their module pseudo-version and
+  embedded VCS metadata instead of always identifying themselves as `dev`.
+- Stdio servers now stop their repository watcher and close its filesystem
+  descriptor when the MCP client disconnects.
+- Main indexes and sidecars are replaced atomically, so interruption during a
+  write cannot leave a truncated target file.
+- Failed watch rebakes no longer record callbacks or apply other removals from
+  the same batch before every changed source file has been read successfully.
+
+### Security
+
+- Source reads now resolve symlinks and reject final targets outside the
+  indexed repository, including files replaced by an external symlink after
+  the index was built.
 
 ## [0.1.0] - 2026-07-18
 

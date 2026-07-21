@@ -60,20 +60,7 @@ func SaveADR(root string, doc *ADRDocument) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, "adr-*.json.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) // no-op once renamed
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, adrPath(root))
+	return writeFileAtomic(adrPath(root), data, 0o644)
 }
 
 func adrSectionIndex(doc *ADRDocument, title string) int {

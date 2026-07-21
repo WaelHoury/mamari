@@ -61,20 +61,7 @@ func SaveNotes(root string, nf *NotesFile) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, "notes-*.json.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) // no-op once renamed
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, notesPath(root))
+	return writeFileAtomic(notesPath(root), data, 0o644)
 }
 
 // AddNote attaches a freeform note to a symbol, persisted in

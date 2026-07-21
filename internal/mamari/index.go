@@ -212,8 +212,7 @@ func readAllFiles(idx *Index, root string, files []string) (map[string]string, e
 		go func() {
 			defer wg.Done()
 			for rel := range jobs {
-				abs := filepath.Join(root, rel)
-				data, err := os.ReadFile(abs)
+				data, err := readRepoFile(root, rel)
 				if err != nil {
 					select {
 					case errs <- err:
@@ -422,7 +421,7 @@ func SaveIndex(idx *Index, path string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(path, data, 0o644); err != nil {
 		return err
 	}
 	idx.mu.Lock()
@@ -469,7 +468,7 @@ func SaveIndexJSON(idx *Index, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomic(path, data, 0o644)
 }
 
 // indexSnapshot mirrors the JSON-serialized fields of Index without the
@@ -912,7 +911,7 @@ func copyFileIfExists(src, dst string) error {
 		}
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
+	return writeFileAtomic(dst, data, 0o644)
 }
 
 func saveLiteralsSidecar(literals []Literal, path string) error {
@@ -922,19 +921,16 @@ func saveLiteralsSidecar(literals []Literal, path string) error {
 		}
 		return nil
 	}
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	enc := json.NewEncoder(file)
-	enc.SetEscapeHTML(false)
-	for _, lit := range literals {
-		if err := enc.Encode(lit); err != nil {
-			return err
+	return writeStreamAtomic(path, 0o644, func(file *os.File) error {
+		enc := json.NewEncoder(file)
+		enc.SetEscapeHTML(false)
+		for _, lit := range literals {
+			if err := enc.Encode(lit); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func loadLiteralsSidecar(path string) ([]Literal, error) {
@@ -1050,7 +1046,7 @@ func readGoModulePath(root string) string {
 	if root == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	data, err := readRepoFile(root, "go.mod")
 	if err != nil {
 		return ""
 	}
